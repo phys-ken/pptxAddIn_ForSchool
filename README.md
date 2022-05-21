@@ -1,4 +1,4 @@
-# 授業支援PowerPointアドイン
+# [授業支援PowerPointアドイン](https://phys-ken.github.io/pptxAddIn_ForSchool/)
 **2022年5月開発開始のため、まだ機能は1つしかありません。**
 
 ## はじめに
@@ -16,7 +16,6 @@
 * 余白の少ない配布用の資料を作成します。
 * 資料として印刷したいスライドのみを選択してから、4分割資料作成をクリックしてください。
 
-![アドインの使い方]
-(files/アドイン使い方.gif)
+![アドインの使い方](files/アドイン使い方.gif)
 
 [phys_ken](https://phys-ken.github.io/phys-ken/)のトップへ戻る
