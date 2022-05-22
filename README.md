@@ -1,3 +1,8 @@
+---
+layout: default
+title: 授業支援PowerPointアドイン
+---
+
 ## はじめに
 * **2022年5月開発開始**
 * このアドインは、学校でPowerPointを使う際に感じるイライラを解消することを目的としています。
@@ -25,4 +30,4 @@
 
 ## リンク
 * トップへ戻る:[授業支援PowerPointアドイン](https://phys-ken.github.io/pptxAddIn_ForSchool/)
-* [phys_ken](https://phys-ken.github.io/phys-ken/)のトップへ戻る
+* 作者:[phys_ken](https://phys-ken.github.io/phys-ken/)
