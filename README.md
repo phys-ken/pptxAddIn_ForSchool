@@ -1,7 +1,4 @@
----
-layout: default
-title: 授業支援PowerPointアドイン
----
+# 授業支援PowerPointアドイン
 
 ## はじめに
 * **2022年5月開発開始**
