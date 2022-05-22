@@ -1,7 +1,5 @@
-# [授業支援PowerPointアドイン](https://phys-ken.github.io/pptxAddIn_ForSchool/)
-**2022年5月開発開始**
-
 ## はじめに
+* **2022年5月開発開始**
 * このアドインは、学校でPowerPointを使う際に感じるイライラを解消することを目的としています。
 * 自由な開発、発展を期待しています。再配布・改造は大歓迎ですが、著作権は放棄しません。
 
@@ -25,5 +23,6 @@
 * 同じく授業支援のタブから`BIZ UDP一括変更`を押すと、本文のフォントの大半がBIZ UDPに変更されるはずです。
 * 図形上のテキストなど、うまく反映されないこともあります。
 
-
-[phys_ken](https://phys-ken.github.io/phys-ken/)のトップへ戻る
+## リンク
+* トップへ戻る:[授業支援PowerPointアドイン](https://phys-ken.github.io/pptxAddIn_ForSchool/)
+* [phys_ken](https://phys-ken.github.io/phys-ken/)のトップへ戻る
