@@ -1,0 +1,290 @@
+Option Explicit
+
+'--- Windows API 宣言(32bit/64bit両対応) ---
+#If VBA7 Then
+    Private Declare PtrSafe Function PathIsDirectoryEmpty Lib "Shlwapi.dll" Alias "PathIsDirectoryEmptyA" (ByVal pszPath As String) As Long
+#Else
+    Private Declare Function PathIsDirectoryEmpty Lib "Shlwapi.dll" Alias "PathIsDirectoryEmptyA" (ByVal pszPath As String) As Long
+#End If
+
+Public Sub warituke4or8()
+    Dim fileDir As String
+    Dim SaveDir As String
+    Dim fileNo As Integer
+    Dim fileName As String
+    
+    '◆ 保存先やファイル名の取得
+    fileDir = ActivePresentation.Path
+    SaveDir = fileDir & "\tmp"
+    
+    '◆ tmpフォルダ準備 (存在しなければ新規作成、存在すれば中身削除)
+    If Dir(SaveDir, vbDirectory) = "" Then
+        MkDir SaveDir
+        fileNo = FreeFile
+        Open SaveDir & "\LogFile.txt" For Output As #fileNo
+            Print #fileNo, "このファイルは削除しないでください。"
+        Close #fileNo
+    Else
+        If PathIsDirectoryEmpty(SaveDir) <> 1 Then
+            Kill SaveDir & "\*"
+            fileNo = FreeFile
+            Open SaveDir & "\LogFile.txt" For Output As #fileNo
+                Print #fileNo, "このファイルは削除しないでください。"
+            Close #fileNo
+        End If
+    End If
+    
+    '◆ 元ファイル名（拡張子除去）
+    With ActivePresentation
+        fileName = Left(.Name, InStrRev(.Name, ".") - 1)
+    End With
+    
+    '◆ 選択されたスライドを取得
+    Dim sr As SlideRange
+    With ActiveWindow.Selection
+        If .Type >= ppSelectionSlides Then
+            Set sr = .SlideRange
+        Else
+            MsgBox "スライドが選択されていません。"
+            Exit Sub
+        End If
+    End With
+    
+    '――選択スライドを配列へ――
+    Dim arrSlides() As Slide
+    ReDim arrSlides(1 To sr.Count)
+    Dim i As Long, j As Long
+    For i = 1 To sr.Count
+        Set arrSlides(i) = sr(i)
+    Next i
+    
+    '――スライドインデックス順にソート――
+    Dim tmpSlide As Slide
+    For i = 1 To UBound(arrSlides) - 1
+        For j = i + 1 To UBound(arrSlides)
+            If arrSlides(j).SlideIndex < arrSlides(i).SlideIndex Then
+                Set tmpSlide = arrSlides(i)
+                Set arrSlides(i) = arrSlides(j)
+                Set arrSlides(j) = tmpSlide
+            End If
+        Next j
+    Next i
+    
+    '――ソート後にJPG書き出し――
+    For i = 1 To UBound(arrSlides)
+        arrSlides(i).Export SaveDir & "\" & fileName & Format(i, "0000") & ".jpg", "JPG"
+    Next i
+    
+    '◆ レイアウト選択 (4枚=A4横 か 8枚=A3縦)
+    Dim ret As VbMsgBoxResult
+    ret = MsgBox( _
+        "4枚(A4横)で割付しますか？" & vbCrLf & _
+        "「いいえ」を選ぶと8枚(A3縦)になります。" & vbCrLf & _
+        "キャンセルすると終了します。", _
+        vbYesNoCancel + vbQuestion, "レイアウト選択")
+    If ret = vbCancel Then
+        MsgBox "処理をキャンセルしました。"
+        Exit Sub
+    End If
+    
+    Dim rowCount As Long, colCount As Long
+    Dim newPrs As Presentation
+    Set newPrs = Presentations.Add
+    
+    If ret = vbYes Then
+        '---- 4枚 (A4横) ----
+        newPrs.Slides.Add 1, ppLayoutBlank
+        newPrs.PageSetup.SlideSize = ppSlideSizeA4Paper
+        rowCount = 2
+        colCount = 2
+    Else
+        '---- 8枚 (A3縦) ----
+        newPrs.Slides.Add 1, ppLayoutBlank
+        With newPrs.PageSetup
+            .SlideWidth = 842    ' 297mm相当
+            .SlideHeight = 1190  ' 420mm相当
+        End With
+        rowCount = 4
+        colCount = 2
+    End If
+    
+    '―― 新規プレゼンに割付配置――
+    addPhotoTilingSlides newPrs, SaveDir, fileName, rowCount, colCount
+    
+    '―― PDFで保存――
+    Dim outPathPdf As String, outPathPptx As String
+    outPathPdf = fileDir & "\_配布用_" & fileName & ".pdf"
+    outPathPptx = fileDir & "\_配布用_" & fileName
+    
+    newPrs.Export outPathPdf, "PDF"
+    newPrs.SaveAs outPathPptx
+    
+    MsgBox "割付済PDFを作成しました。" & vbCrLf & _
+           "PDFファイルも同じフォルダに作成されています。", vbInformation
+End Sub
+
+'===========================================================================
+' 画像を行列状に貼り付ける: 上下左右のマージンは固定し、
+'   まず最小ギャップで画像サイズを最大化 → 余剰があればギャップを広げる
+'===========================================================================
+Private Sub addPhotoTilingSlides(ByVal tmpPrs As Presentation, _
+                                 ByVal SaveDir As String, _
+                                 ByVal baseName As String, _
+                                 ByVal rowCount As Long, _
+                                 ByVal colCount As Long)
+    
+    Dim sldW As Single, sldH As Single
+    sldW = tmpPrs.PageSetup.SlideWidth
+    sldH = tmpPrs.PageSetup.SlideHeight
+    
+    '--- 画像ファイル一覧を収集 ---
+    Dim fso As Object, fld As Object, fil As Object
+    Set fso = CreateObject("Scripting.FileSystemObject")
+    Set fld = fso.GetFolder(SaveDir)
+    
+    Dim fileList As New Collection
+    For Each fil In fld.Files
+        If InStr(fil.Name, baseName) > 0 And Right(fil.Name, 4) = ".jpg" Then
+            fileList.Add fil.Path
+        End If
+    Next
+    If fileList.Count = 0 Then
+        MsgBox "画像が見つかりませんでした。"
+        Exit Sub
+    End If
+    
+    '◆ 上下左右マージンは固定 (約1cm=28pt)
+    Const MARGIN_TB As Single = 28   ' top/bottom
+    Const MARGIN_LR As Single = 28   ' left/right
+    
+    '◆ 画像間の最小ギャップ (約3mm=8.5pt)
+    Const GAP_MIN As Single = 8.5
+    
+    '◆ 1ページあたりに貼る最大枚数
+    Dim chunkSize As Long
+    chunkSize = rowCount * colCount
+    
+    Dim currentSlideIndex As Long
+    currentSlideIndex = 1
+    
+    Dim startIdx As Long, endIdx As Long
+    startIdx = 1
+    
+    '――複数ページ分のループ――
+    Do While startIdx <= fileList.Count
+        
+        endIdx = startIdx + chunkSize - 1
+        If endIdx > fileList.Count Then endIdx = fileList.Count
+        
+        '--- 新規スライド(または1枚目)を取得 ---
+        Dim pptSlide As Slide
+        If currentSlideIndex = 1 Then
+            Set pptSlide = tmpPrs.Slides(currentSlideIndex)
+        Else
+            Set pptSlide = tmpPrs.Slides.Add(currentSlideIndex, ppLayoutBlank)
+        End If
+        currentSlideIndex = currentSlideIndex + 1
+        
+        Dim pageCount As Long
+        pageCount = endIdx - startIdx + 1
+        
+        ' (1) 代表画像のサイズ(Width/Height)を取得
+        Dim shpTemp As Shape
+        Set shpTemp = pptSlide.Shapes.AddPicture( _
+                          FileName:=CStr(fileList.Item(startIdx)), _
+                          LinkToFile:=msoFalse, _
+                          SaveWithDocument:=msoTrue, _
+                          Left:=-1000, Top:=-1000)
+        Dim repW As Single, repH As Single
+        repW = shpTemp.Width
+        repH = shpTemp.Height
+        shpTemp.Delete
+        
+        ' (2) 最小ギャップで画像を並べたときの「最大拡大率」を計算
+        Dim usedRows As Long, usedCols As Long
+        usedRows = (pageCount \ colCount)
+        If (pageCount Mod colCount) <> 0 Then
+            usedRows = usedRows + 1
+        End If
+        usedCols = colCount
+        
+        ' 実際に使える幅・高さ (マージン固定、最小ギャップで計算)
+        Dim usableW As Single, usableH As Single
+        usableW = (sldW - (MARGIN_LR * 2)) - (usedCols - 1) * GAP_MIN
+        usableH = (sldH - (MARGIN_TB * 2)) - (usedRows - 1) * GAP_MIN
+        
+        Dim ratioW As Single, ratioH As Single, ratio As Single
+        ratioW = usableW / (usedCols * repW)
+        ratioH = usableH / (usedRows * repH)
+        ratio = IIf(ratioW < ratioH, ratioW, ratioH)
+        If ratio < 0 Then ratio = 0.05 ' セーフガード
+        
+        ' 拡大後サイズ
+        Dim newW As Single, newH As Single
+        newW = repW * ratio
+        newH = repH * ratio
+        
+        ' (3) 上記サイズ・ギャップで必要な合計幅/高さ
+        Dim totalNeededW As Single, totalNeededH As Single
+        totalNeededW = usedCols * newW + (usedCols - 1) * GAP_MIN
+        totalNeededH = usedRows * newH + (usedRows - 1) * GAP_MIN
+        
+        ' (4) もし「まだ余り」がある場合はギャップを増やす
+        Dim extraW As Single, extraH As Single
+        extraW = (sldW - (MARGIN_LR * 2)) - totalNeededW
+        extraH = (sldH - (MARGIN_TB * 2)) - totalNeededH
+        
+        ' ギャップは 水平/垂直で別々に拡張
+        Dim gapX As Single, gapY As Single
+        gapX = GAP_MIN
+        gapY = GAP_MIN
+        
+        If extraW > 0 And (usedCols - 1) > 0 Then
+            gapX = gapX + (extraW / (usedCols - 1))
+        End If
+        If extraH > 0 And (usedRows - 1) > 0 Then
+            gapY = gapY + (extraH / (usedRows - 1))
+        End If
+        
+        '――実配置――
+        Dim posRow As Long, posCol As Long
+        posRow = 0
+        posCol = 0
+        
+        Dim k As Long
+        For k = startIdx To endIdx
+            
+            Dim shp As Shape
+            Set shp = pptSlide.Shapes.AddPicture( _
+                            FileName:=CStr(fileList.Item(k)), _
+                            LinkToFile:=msoFalse, _
+                            SaveWithDocument:=msoTrue, _
+                            Left:=0, Top:=0)
+            ' 同じ拡大率で統一
+            shp.Width = newW
+            shp.Height = newH
+            
+            ' 配置 (マージン固定, ギャップ拡張)
+            shp.Left = MARGIN_LR + posCol * (newW + gapX)
+            shp.Top = MARGIN_TB + posRow * (newH + gapY)
+            
+            ' 枠線 (黒)
+            With shp.Line
+                .Visible = msoTrue
+                .Weight = 1
+                .ForeColor.RGB = RGB(0, 0, 0)
+            End With
+            
+            ' 次の列へ
+            posCol = posCol + 1
+            If posCol >= colCount Then
+                posCol = 0
+                posRow = posRow + 1
+            End If
+        Next k
+        
+        ' 次ページへ
+        startIdx = endIdx + 1
+    Loop
+    
+End Sub
